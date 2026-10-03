@@ -1,0 +1,329 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage[margin=2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage[font=small,labelfont=bf,skip=4pt]{caption}
+\usepackage{xcolor}
+\usepackage[compact]{titlesec}
+\usepackage[backend=biber,style=numeric,sorting=none]{biblatex}
+\addbibresource{references.bib}
+\usepackage[colorlinks=true,linkcolor=blue!60!black,citecolor=blue!60!black,urlcolor=blue!60!black]{hyperref}
+
+% Compact spacing
+\setlength{\intextsep}{6pt}
+\setlength{\textfloatsep}{8pt}
+\setlength{\floatsep}{6pt}
+\titlespacing*{\section}{0pt}{10pt}{4pt}
+\titlespacing*{\subsection}{0pt}{8pt}{3pt}
+\setlength{\abovedisplayskip}{4pt}
+\setlength{\belowdisplayskip}{4pt}
+
+\title{Thermo-hydraulic optimization of a NEPCM micro-channel\\with a teardrop-shaped obstacle}
+\author{Mustafa Amine BENGA}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This study assesses a passive teardrop-shaped obstacle and nano-encapsulated phase change materials (NEPCM) in a heated micro-channel. A validated Fluent model, with NEPCM properties implemented in a UDF, is coupled to an optiSLang optimization of 100 designs. The optimum, validated with Fluent, gives $PEC = 0.865$: the obstacle adds about 6\,\% heat transfer but multiplies the pressure drop by 1.7 to 4.
+\end{abstract}
+
+%=====================================================
+\section{Problem setup}
+%=====================================================
+The domain is a 2D planar channel of length $L = 10$~mm and height $H = 1$~mm ($D_h = 2H = 2$~mm). An adiabatic teardrop-shaped obstacle (radius $R = 0.125$~mm, tip $0.25$~mm downstream of the centre) is placed at $(3;0)$~mm. Its shape is controlled by two stretch factors: $s_x$ along the flow and $s_y$ across it. The domain is shown in Fig.~\ref{fig:domain} and the boundary conditions in Table~\ref{tab:bc}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\linewidth]{fig_domain.png}
+\caption{Computational domain and boundary conditions (top); obstacle geometry (bottom).}
+\label{fig:domain}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{Boundary conditions.}
+\label{tab:bc}
+\begin{tabular}{ll}
+\toprule
+Boundary & Condition \\
+\midrule
+Inlet & parabolic profile of mean velocity $u_e$, $T_{in} = 298.15$~K \\
+Outlet & $p = 0$~Pa, backflow $T = 298.15$~K \\
+Top and bottom walls & uniform heat flux $q'' = 30$~W/cm$^2$ \\
+Obstacle & adiabatic, no slip \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Performance is measured at equal velocity against a smooth channel (subscript 0):
+\begin{equation}
+PEC = \frac{Nu/Nu_0}{\left(\Delta p/\Delta p_0\right)^{1/3}}, \qquad
+Nu = \frac{q''\,D_h}{k_w\,(\overline{T}_w - T_{in})}.
+\label{eq:pec}
+\end{equation}
+
+%=====================================================
+\section{Governing equations and property models}
+%=====================================================
+The suspension is treated as a single homogeneous fluid. The flow is steady, laminar and incompressible:
+\begin{align}
+\nabla\cdot\mathbf{u} &= 0, \label{eq:mass}\\
+\rho\,(\mathbf{u}\cdot\nabla)\,\mathbf{u} &= -\nabla p + \nabla\cdot\left(\mu\,\nabla\mathbf{u}\right), \label{eq:mom}\\
+\rho\,C_p(T)\,(\mathbf{u}\cdot\nabla T) &= \nabla\cdot\left(k\,\nabla T\right). \label{eq:energy}
+\end{align}
+
+The mixture properties (subscripts $w$: water, $p$: capsule; $\varphi$: volume fraction) are
+\begin{align}
+\rho &= (1-\varphi)\,\rho_w + \varphi\,\rho_p, \label{eq:rho}\\
+k &= k_w\,\frac{k_p + 2k_w - 2\varphi\,(k_w - k_p)}{k_p + 2k_w + \varphi\,(k_w - k_p)} \qquad \text{(Maxwell~\cite{maxwell1873})}, \label{eq:k}\\
+\mu &= \mu_w\left(1 + 2.5\,\varphi + 6.5\,\varphi^2\right) \qquad \text{(Batchelor~\cite{batchelor1977})}. \label{eq:mu}
+\end{align}
+
+Melting is represented by a heat capacity with a sinusoidal peak over the melting range $T_{mr}$ around $T_f$~\cite{ghalambaz2019}:
+\begin{equation}
+C_p(T) =
+\begin{cases}
+\omega\,C_{p,p} + (1-\omega)\,C_{p,w} + \omega\,\dfrac{\pi}{2}\left(\dfrac{h_{sf}}{T_{mr}} - C_{p,p}\right)\sin\!\left(\pi\,\dfrac{T - T_f + T_{mr}/2}{T_{mr}}\right) & \text{if } |T - T_f| \le \dfrac{T_{mr}}{2},\\[3mm]
+\omega\,C_{p,p} + (1-\omega)\,C_{p,w} & \text{otherwise},
+\end{cases}
+\label{eq:cp}
+\end{equation}
+where $\omega = \varphi\,\rho_p/\rho$ is the capsule mass fraction. Material data are given in Table~\ref{tab:props}.
+
+\begin{table}[H]
+\centering
+\caption{Material properties (capsule with n-octadecane core~\cite{chen2021}).}
+\label{tab:props}
+\begin{tabular}{lcc}
+\toprule
+Property & Water & Capsule \\
+\midrule
+$\rho$ (kg/m$^3$) & 997.1 & 1033 \\
+$k$ (W/m.K) & 0.613 & 0.2 \\
+$C_p$ (J/kg.K) & 4179 & 1830 \\
+$\mu$ (Pa.s) & $7.97\times10^{-4}$ & -- \\
+$h_{sf}$ (J/kg) & -- & 152\,600 \\
+$T_f$ ; $T_{mr}$ (K) & -- & 301.15 ; 0.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Implementation.} Equations~\eqref{eq:rho} to \eqref{eq:cp} are implemented in a user-defined function (UDF). Equations~\eqref{eq:mass} to \eqref{eq:energy} are solved with Ansys Fluent 2026~R1 (pressure-based coupled solver, second-order schemes, residuals below $10^{-6}$).
+
+%=====================================================
+\section{Mesh}
+%=====================================================
+A structured O-grid surrounds the obstacle and is refined towards the walls and the obstacle surface (Fig.~\ref{fig:mesh}). The obstacle shape is changed by mesh morphing, so every design keeps the same topology. Mesh quality is given in Table~\ref{tab:quality}.
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[width=0.9\linewidth]{fig_mesh.png}\\[1mm]
+\includegraphics[width=0.6\linewidth]{fig_mesh_zoom.png}
+\caption{Medium mesh (31\,200 cells): full channel (top) and O-grid around the obstacle (bottom).}
+\label{fig:mesh}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{Quality of the medium mesh.}
+\label{tab:quality}
+\begin{tabular}{lc}
+\toprule
+Metric & Value \\
+\midrule
+Number of cells & 31\,200 \\
+Minimum orthogonal quality & 0.494 \\
+Maximum aspect ratio & 13.4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=====================================================
+\section{Mesh convergence (GCI)}
+%=====================================================
+Three meshes with a constant refinement ratio $r = 1.5$ were compared on the case $\varphi = 0.04$, $s_x = 1$, $s_y = 1.4$, $u_e = 0.6$~m/s, following the ASME procedure~\cite{celik2008} (Table~\ref{tab:gci}).
+
+\begin{table}[H]
+\centering
+\caption{Spatial discretization error.}
+\label{tab:gci}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Parameters} & $\psi = Nu_m$ & $\psi = \Delta P$ \\
+ & {\small (monotonic convergence)} & {\small (monotonic convergence)} \\
+\midrule
+$N_1\,;\,N_2\,;\,N_3$ & \multicolumn{2}{c}{70\,410 ; 31\,200 ; 13\,780} \\
+$r_m$ & \multicolumn{2}{c}{1.5} \\
+\midrule
+$\psi_1\,;\,\psi_2\,;\,\psi_3$ & 23.871 ; 23.843 ; 23.781 & 177.71 ; 178.02 ; 179.06 \\
+$O_a$ & 1.96 & 2.99 \\
+$\psi_{ext}^{21}$ & 23.894 & 177.578 \\
+$E_a^{21}$ & 0.117\,\% & 0.174\,\% \\
+$E_{ext}^{21}$ & 0.097\,\% & 0.074\,\% \\
+$GCI_{fine}^{21}$ & 0.12\,\% & 0.09\,\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Convergence is monotonic with an order close to 2, as expected for second-order schemes. The medium mesh is retained (0.1--0.2\,\% from the fine mesh).
+
+%=====================================================
+\section{Verification and validation}
+%=====================================================
+\begin{table}[H]
+\centering
+\caption{Comparison with analytical references (200~mm channel, fully developed flow).}
+\label{tab:valid}
+\begin{tabular}{lccc}
+\toprule
+Quantity & Present study & Reference & Deviation \\
+\midrule
+$Nu$ & 8.310 & 8.235~\cite{shah1978} & 0.92\,\% \\
+$\Delta p$ & 190.85~Pa & 191.28~Pa~\cite{shah1978} & 0.22\,\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The reference values $Nu_0$ and $\Delta p_0$ in Eq.~\eqref{eq:pec} are computed on the smooth channel (11 runs between 0.1 and 0.6~m/s).
+
+%=====================================================
+\section{Optimization setup}
+%=====================================================
+The design space is given in Table~\ref{tab:doe}. The objective is to maximize $PEC$ under the constraint $T_{max} \le 363.15$~K (90~$^\circ$C). optiSLang AMOP~\cite{most2008} builds a metamodel from 100 advanced Latin hypercube designs; all of them converged and 47 satisfy the constraint.
+
+\begin{table}[H]
+\centering
+\caption{Design parameters.}
+\label{tab:doe}
+\begin{tabular}{lcc}
+\toprule
+Parameter & Range & Role \\
+\midrule
+$\varphi$ & 0 -- 0.04 & NEPCM volume fraction \\
+$s_x$ & 0.8 -- 1.8 & obstacle length \\
+$s_y$ & 0.6 -- 1.4 & obstacle height (15 to 35\,\% blockage) \\
+$u_e$ & 0.1 -- 0.6~m/s & inlet velocity ($Re$ from 250 to 1\,440) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Metamodel quality and parameter influence are measured by the optiSLang coefficient of prognosis (CoP, Table~\ref{tab:cop}).
+
+\begin{table}[H]
+\centering
+\caption{optiSLang coefficients of prognosis (CoP). ``--'': parameter filtered out as negligible.}
+\label{tab:cop}
+\begin{tabular}{lccccc}
+\toprule
+Output & $\varphi$ & $s_x$ & $s_y$ & $u_e$ & Total CoP \\
+\midrule
+$PEC$ & 0.039 & 0.047 & 0.560 & 0.401 & 0.993 \\
+$T_{max}$ & -- & 0.021 & 0.022 & 0.978 & 0.989 \\
+$Nu$ & -- & -- & -- & 0.985 & 0.985 \\
+$\Delta p$ & -- & -- & 0.158 & 0.861 & 0.984 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The metamodel is highly reliable (total CoP above 0.98). $PEC$ is driven mainly by the obstacle height $s_y$, then by the inlet velocity $u_e$; $T_{max}$ depends almost only on $u_e$. The NEPCM fraction and the obstacle length have a minor influence.
+
+%=====================================================
+\section{Results and discussion}
+%=====================================================
+\subsection{Heat transfer gain and hydraulic cost}
+\begin{figure}[!htb]
+\centering
+\includegraphics[width=0.85\linewidth]{fig_ratios.png}
+\caption{Heat transfer gain $Nu/Nu_0$ and hydraulic cost $\Delta p/\Delta p_0$ of the 100 designs versus obstacle height.}
+\label{fig:ratios}
+\end{figure}
+The obstacle raises $Nu$ by only about 6\,\% ($Nu/Nu_0$ between 1.05 and 1.09), almost independently of its height, whereas the pressure drop is multiplied by 1.7 to 4 and grows clearly with $s_y$ (Fig.~\ref{fig:ratios}). $PEC$ is therefore governed by the hydraulic penalty. A few tall and short obstacles at high velocity are exceptions ($Nu/Nu_0 < 1$); this case is analysed in Section~\ref{sec:dp83}.
+
+\subsection{Thermal constraint and optimum}
+\begin{figure}[H]
+\centering
+\begin{minipage}[t]{0.49\linewidth}\centering
+\includegraphics[width=\linewidth]{fig_tmax.png}
+\caption{Maximum temperature of the 100 designs versus inlet velocity.}
+\label{fig:tmax}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\linewidth}\centering
+\includegraphics[width=\linewidth]{fig_pec_surface.png}
+\caption{$PEC$ response surface from the optiSLang metamodel ($\varphi = 0$, $s_x = 1.5$). Hatched: $T_{max} > 363$~K.}
+\label{fig:surface}
+\end{minipage}
+\end{figure}
+$T_{max}$ decreases with $u_e$, and the 363~K limit requires a minimum inlet velocity of about 0.35~m/s (Fig.~\ref{fig:tmax}). $PEC$ alone would be misleading: the best $PEC$ of the sample (0.881, at $u_e = 0.10$~m/s) comes with a 402~K wall.
+
+$\varphi$ and $s_x$, which have little influence (Table~\ref{tab:cop}), are set to 0 and 1.5. The optimum lies at the minimum obstacle height, right on the thermal limit (Fig.~\ref{fig:surface}). It was recomputed with Fluent (Table~\ref{tab:optimum}).
+
+\begin{table}[H]
+\centering
+\caption{Optimum: optiSLang prediction and Fluent computation ($\varphi = 0$, $s_x = 1.5$, $s_y = 0.6$, $u_e = 0.375$~m/s).}
+\label{tab:optimum}
+\begin{tabular}{lccc}
+\toprule
+Output & optiSLang & Fluent & Deviation \\
+\midrule
+$PEC$ & 0.868 & 0.865 & $-0.4$\,\% \\
+$T_{max}$ (K) & 362.8 & 362.0 & $-0.8$~K \\
+$Nu$ & -- & 20.81 & -- \\
+$\Delta p$ (Pa) & -- & 65.46 & -- \\
+$R_{th}$ (K.cm$^2$/W) & -- & 2.130 & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+The Fluent computation confirms the prediction within 0.4\,\% and satisfies the thermal constraint.
+
+\subsection{Flow and thermal fields}
+Figures~\ref{fig:velocity} and \ref{fig:temperature} compare three cases at $u_e = 0.345$~m/s and $\varphi = 0.04$: smooth channel, baseline obstacle ($s_x = 1$, $s_y = 1.4$) and optimal shape ($s_x = 1.5$, $s_y = 0.6$).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\linewidth]{fig_velocity.png}
+\caption{Velocity magnitude and streamlines.}
+\label{fig:velocity}
+\end{figure}
+The baseline obstacle accelerates the flow in the two gaps and creates a long recirculation zone in its wake (Fig.~\ref{fig:velocity}). The optimal shape disturbs the flow much less, hence its lower pressure drop.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\linewidth]{fig_temperature.png}
+\caption{Temperature field.}
+\label{fig:temperature}
+\end{figure}
+Heat remains confined in thin layers along the walls, while the core stays at the inlet temperature (Fig.~\ref{fig:temperature}). The obstacle thins these layers only locally.
+
+\subsection{Wall separation and hot spot (design DP83)}
+\label{sec:dp83}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\linewidth]{fig_dp83.png}
+\caption{Design DP83 ($\varphi = 0.0114$, $s_x = 0.965$, $s_y = 1.26$, $u_e = 0.5725$~m/s): temperature and streamlines (top); bottom-wall temperature and wall shear stress (bottom).}
+\label{fig:dp83}
+\end{figure}
+Design DP83 reaches $T_{max} = 370$~K, about 15~K above the trend at this velocity. Fig.~\ref{fig:dp83} shows the cause: downstream of the minimum flow section, the flow decelerates and separates from the wall. The wall shear stress becomes negative between $x = 4.4$ and $5.9$~mm, and the temperature peak (370~K at $x = 4.9$~mm) lies inside this separation bubble. Tall and short obstacles therefore create a hot spot on the wall.
+
+%=====================================================
+\section{Conclusions}
+%=====================================================
+\begin{enumerate}
+\item A passive centred obstacle does not pay off at equal velocity: the validated optimum gives $PEC = 0.865$.
+\item The obstacle height controls the trade-off: it sets the pressure drop without improving heat transfer.
+\item $PEC$ must be paired with a temperature limit; without it, the best $PEC$ comes with a 129~$^\circ$C wall.
+\item The NEPCM fraction has a small influence on $PEC$ and none on $T_{max}$.
+\item Tall and short obstacles cause wall separation and a local hot spot.
+\end{enumerate}
+
+\printbibliography[title={References}]
+
+\end{document}
